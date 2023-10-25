@@ -1,0 +1,34 @@
+[build-system]
+requires = [
+    "setuptools>=61.2",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prismasyncjmfjdf"
+version = "0.9.1"
+authors = [
+    { name = "Dries Dokter" },
+]
+description = "Python library for PRISMAsync jmfjdf queries and commands"
+dependencies = [
+    "requests",
+    "base64io",
+    "pathlib",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [
+    "prismasyncjmfjdf",
+]
+namespaces = false
+
+[tool.setuptools.package-data]
+prismasyncjmfjdf = [
+    "*.jmf",
+    "*.jdf", 
+    "*.pdf"
+]

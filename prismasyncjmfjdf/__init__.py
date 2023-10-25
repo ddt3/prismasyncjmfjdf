@@ -1,6 +1,6 @@
-from prismasyncjmfjdf import jmfmessages
+from prismasyncjmfjdf import prismasyncjmfjdf
 
-from prismasyncjmfjdf.jmfmessages import (CreateMimePackage,
+from prismasyncjmfjdf.prismasyncjmfjdf import (CreateMimePackage,
                                           RemoveQueueEntries,
                                           ReturnQueueEntries, SendJob,
                                           SendMime, basepath, example_job,
@@ -14,6 +14,5 @@ from prismasyncjmfjdf.jmfmessages import (CreateMimePackage,
 __all__ = ['CreateMimePackage', 'RemoveQueueEntries', 'ReturnQueueEntries',
            'SendJob', 'SendMime', 'basepath', 'example_job', 'jdf_template',
            'jmf_QueueStatus_msg', 'jmf_RemoveQueueEntry_msg',
-           'jmf_SubmitQueueEntry_msg', 'jmfmessages', 'mimefooter',
-           'mimeheader_jdf', 'mimeheader_jmf', 'mimeheader_pdf', 'read_jmfjdf',
-           'read_pdf']
+           'jmf_SubmitQueueEntry_msg', 'mimefooter', 'mimeheader_jdf', 
+           'mimeheader_jmf', 'mimeheader_pdf', 'read_jmfjdf','read_pdf']
