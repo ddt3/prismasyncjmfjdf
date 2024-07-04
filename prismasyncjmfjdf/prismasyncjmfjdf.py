@@ -140,6 +140,8 @@ def RemoveQueueEntries (url, **kwargs):
     Parameters:
     url: full link to printer jmf interface e.g. http://prismasync.lan:8010
     status: String of job states. Jobs in this state will be removed: (e.g. "Completed Aborted")
+    QueueEntryID: a single QueueEntryID to be removed
+    Note that status and QueueEntryID cannot be used together
 
     Returns:
     int:Number of removed queueentries
