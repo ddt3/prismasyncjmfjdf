@@ -1,3 +1,4 @@
+# can be build using: python -m build .
 [build-system]
 requires = [
     "setuptools>=61.2",
@@ -6,15 +7,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prismasyncjmfjdf"
-version = "0.9.3"
+version = "0.9.4"
 authors = [
     { name = "Dries Dokter" },
 ]
 description = "Python library for PRISMAsync jmfjdf queries and commands"
 dependencies = [
     "requests",
-    "base64io",
-    "pathlib",
+    "base64io", 
 ]
 
 [tool.setuptools]
