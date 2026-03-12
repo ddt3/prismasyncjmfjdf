@@ -18,10 +18,38 @@ from base64io import Base64IO
 # These files are stored in the same folder as this file so that is used as an anchor point
 # pathlib is used, so this library will work on both Windows and linux
 basepath=Path(__file__).resolve().parent
-jmf_QueueStatus_msg=basepath.joinpath("QueueStatus.jmf")
-jmf_SubmitQueueEntry_msg=basepath.joinpath("SubmitQueueEntry.jmf")
-jmf_RemoveQueueEntry_msg=basepath.joinpath("RemoveQueueEntry.jmf")
-jdf_template=basepath.joinpath("Template.jdf")
+
+def _get_config_path():
+  """Find the .config folder containing JMF template files.
+  
+  When running as a PyInstaller executable, the .config folder is at the location
+  where the exe is deployed. When running as source code, it's in the package folder.
+  This function searches in order:
+  1. .config folder relative to the bundled executable (for deployments)
+  2. .config folder in the package directory
+  3. Falls back to the package directory itself
+  """
+  # When running as PyInstaller bundle, sys.frozen is set
+  if getattr(sys, 'frozen', False):
+    # Get the directory where the executable is located
+    exe_dir = Path(sys.executable).parent
+    config_path = exe_dir / ".config"
+    if config_path.exists():
+      return config_path
+  
+  # Check for .config in the package directory
+  config_path = basepath / ".config"
+  if config_path.exists():
+    return config_path
+  
+  # Fall back to package directory (for backward compatibility)
+  return basepath
+
+config_path = _get_config_path()
+jmf_QueueStatus_msg=config_path.joinpath("QueueStatus.jmf")
+jmf_SubmitQueueEntry_msg=config_path.joinpath("SubmitQueueEntry.jmf")
+jmf_RemoveQueueEntry_msg=config_path.joinpath("RemoveQueueEntry.jmf")
+jdf_template=config_path.joinpath("Template.jdf")
 
 
 
