@@ -343,10 +343,10 @@ def SendMime(url,mime_file):
     id:QueueEntryID of submitted job
 
   """
-  with open(mime_file,'r', encoding="UTF-8") as datafile:
+  with open(mime_file, 'rb') as datafile:
     headers={'Content-Type': 'multipart/related'}
     try:
-      # Submit the mime message to PRISMAsync and wait for the response
+      # Read and submit as raw bytes to support binary MIME parts (e.g. ODF).
       response=requests.post(url=url, data=datafile.read(), headers=headers, timeout=30, verify=True)
       root = xml.dom.minidom.parseString(response.content)
     except requests.exceptions.RequestException as e:
