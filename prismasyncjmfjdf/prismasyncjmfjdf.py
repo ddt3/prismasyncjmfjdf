@@ -84,9 +84,18 @@ Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename=Job1.pdf
 
 """
+mimeheader_pdf_bin = """
+--I_Love_PRISMAsync
+Content-ID: part3@PRISMAsync.printer
+Content-Type: application/pdf; name=Job1.pdf
+Content-Transfer-Encoding: binary
+Content-Disposition: attachment; filename=Job1.pdf
+
+"""
 
 # Mime Footer
 mimefooter = """
+
 --I_Love_PRISMAsync--"""
 
 
@@ -219,7 +228,7 @@ def RemoveQueueEntries (url, **kwargs):
         nrjobs-=1
     return nrjobs
 
-def CreateMimePackage (jmf_file, jdf_file,pdf_url) :
+def CreateMimePackage (jmf_file, jdf_file,pdf_url, pdf_coding="binary"):
   """Creates a mime pacakge from the provided files
 
     Parameters:
@@ -236,18 +245,27 @@ def CreateMimePackage (jmf_file, jdf_file,pdf_url) :
 
   # First determine if PDF needs to be included in mime of referenced by url
   # If it needs to be included in mime: encode the PDF in base64 format
-  sendmime="file://" in pdf_url
+  # When the pdf_url does not start with http:// or https://, it is assumed to be a file on disk and will be added to the mime package
+  sendmime=not(("http://" in pdf_url) or ("https://" in pdf_url))
   pdf_file=str(pdf_url).replace("file://","")
   if sendmime:
     #PDF needs to be read from disk using filename provided
     try:
-      with open(pdf_file, "rb") as source, open(encoded_filename, "wb") as target:
-          # Create base64 encoded file from PDF
-          with Base64IO(target) as encoded_target:
-              for line in source:
-                  encoded_target.write(line)
+      # PDF will be added to mime package either as binary or base64 encoded, depending on pdf_coding parameter
+      # If encoding is binary, the PDF will be added to the mime package as is, 
+      # if encoding is base64, the PDF will be base64 encoded and added to the mime package
+      if pdf_coding=="binary":
+        # Add encoded_filename as file pointer to the PDF file, so it can be added to the mime package as is
+        encoded_filename=pdf_file
+      else:
+        # The encoding is base64 (or not correctly defined then assume base64)
+        with open(pdf_file, "rb") as source, open(encoded_filename, "wb") as target:
+            # Create base64 encoded file from PDF
+            with Base64IO(target) as encoded_target:
+                for line in source:
+                    encoded_target.write(line)
     except:
-      print("File", sendmime, "could not be opened")
+      print("File", encoded_filename, "could not be opened")
       return ""
 
   else:
@@ -262,20 +280,20 @@ def CreateMimePackage (jmf_file, jdf_file,pdf_url) :
   #   i+=1
   #   unique_filename=time_string+"_"+str(i)+".mjm"
 
-  with open(unique_filename, 'w', encoding="UTF-8") as outfile:
+  with open(unique_filename, 'wb') as outfile:
     # Part 1: JMF messages
     # Start with JMF mimeheader
-    outfile.write(mimeheader_jmf)
+    outfile.write(mimeheader_jmf.encode("utf-8"))
     # Add jmf file
     with open(jmf_file,'r', encoding="UTF-8") as tempfile:
       jmf_message=tempfile.read()
       # In this JMF message, include refrence to JDF file: JDF file is part2 of this mime pacakge.
       jmf_message=re.sub(" URL=\".*?\""," URL=\"cid:part2@PRISMAsync.printer\"",jmf_message)
-    outfile.write(jmf_message)
+    outfile.write(jmf_message.encode("utf-8"))
 
     # Part 2: JDF ticket
     # Start with JDF mimeheader
-    outfile.write(mimeheader_jdf)
+    outfile.write(mimeheader_jdf.encode("utf-8"))
     # Add jdf file
     with open(jdf_file, 'r', encoding="UTF-8") as tempfile:
       jdf_message=tempfile.read()
@@ -289,19 +307,22 @@ def CreateMimePackage (jmf_file, jdf_file,pdf_url) :
       jdf_message=jdf_message.replace("REPLACE_ID",time.asctime())
       jdf_message=jdf_message.replace("REPLACE_JOBID",pdf_url.rsplit('/', 1)[-1])
       jdf_message=jdf_message.replace("REPLACE_JOBPARTID",time.asctime())
-    outfile.write(jdf_message)
+    outfile.write(jdf_message.encode("utf-8"))
 
     # Part 3: PDF file
     if sendmime :
       # Needs to be send in mime package, adding it
       # Start with PDF mimeheader
-      outfile.write(mimeheader_pdf)
+        if pdf_coding == "binary":
+          outfile.write(mimeheader_pdf_bin.encode("utf-8"))
+        else:
+          outfile.write(mimeheader_pdf.encode("utf-8"))
       # Add pdf file
-      with open(encoded_filename,'r', encoding="UTF-8") as tempfile:
-        for line in tempfile:
-          outfile.write(line)
-      Path(encoded_filename).unlink()
-    outfile.write(mimefooter)
+      # If the file is binary reading it line by line cannot be done (binary files don't contain lines)
+        with open(encoded_filename,'rb') as tempfile:
+          outfile.write(tempfile.read())
+      # Path(encoded_filename).unlink()
+    outfile.write(mimefooter.encode("utf-8"))
 
   #outfile closed, return mime file name
   return unique_filename
