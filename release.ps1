@@ -1,4 +1,4 @@
-# Release automation script wrapper for prismasyncjmfjdf
+# Release automation script for prismasyncjmfjdf
 # Usage: .\release.ps1
 
 param(
@@ -7,150 +7,188 @@ param(
     [switch]$Help = $false
 )
 
+$ErrorActionPreference = "Stop"
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n$Message" -ForegroundColor Cyan
+}
+
+function Fail {
+    param([string]$Message)
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
+    exit 1
+}
+
+function Get-PyProjectVersion {
+    param([string]$PyProjectPath)
+
+    if (-not (Test-Path $PyProjectPath)) {
+        Fail "pyproject.toml not found at $PyProjectPath"
+    }
+
+    $inProjectSection = $false
+    foreach ($line in Get-Content -Path $PyProjectPath) {
+        if ($line -match '^\s*\[project\]\s*$') {
+            $inProjectSection = $true
+            continue
+        }
+        if ($inProjectSection -and $line -match '^\s*\[') {
+            break
+        }
+        if ($inProjectSection -and $line -match '^\s*version\s*=\s*"([^"]+)"') {
+            return $matches[1]
+        }
+    }
+
+    Fail "Could not find [project].version in pyproject.toml"
+}
+
+function Get-LatestReleaseVersion {
+    param([string]$Repository)
+
+    $output = gh api "repos/$Repository/releases/latest" --jq '.tag_name' 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+        return $null
+    }
+
+    return ($output.Trim()) -replace '^[vV]', ''
+}
+
 if ($Help) {
     Write-Host @"
 PRISMAsync Python Module Release Script
-========================================
+=======================================
 
 Usage: .\release.ps1 [-GitHubToken <token>] [-DryRun] [-Help]
 
 Options:
-  -GitHubToken <token>  GitHub Personal Access Token (or set GITHUB_TOKEN environment variable)
-  -DryRun               Perform all checks and build, but don't create actual release
+  -GitHubToken <token>  GitHub token (or set GITHUB_TOKEN environment variable)
+  -DryRun               Perform checks and build; do not create a release
   -Help                 Show this help message
 
-Setup Instructions:
-  1. Create a GitHub Personal Access Token:
-     - Fine-grained (recommended): https://github.com/settings/tokens?type=beta
-       * Select repository: ddt3/prismasyncjmfjdf
-       * Permissions: Contents (read/write), Workflows (read/write)
-     - Classic: https://github.com/settings/tokens
-       * Scopes: repo, workflows
-     - Copy the token
-
-  2. Run this script with your token:
-     `$env:GITHUB_TOKEN = "your_token_here"`
-     .\release.ps1
-
-  Or pass it directly:
-     .\release.ps1 -GitHubToken "your_token_here"
-
-Requirements:
-  - Python 3 with 'build' package
-  - requests library
-  - pyproject.toml with updated version number
-
-Release Checklist:
-  1. Update version in pyproject.toml
-  2. Commit and push changes to main branch
-  3. Run this script with a valid GitHub token
-  4. Script will:
-     - Check version changed from latest release
-     - Build the wheel file
-     - Rename wheel to remove version info
-     - Create GitHub release with tag v<version>
-     - Upload wheel as release asset
-
+What this script does:
+  1. Validates clean git working tree
+  2. Validates local branch is in sync with origin
+  3. Reads version from pyproject.toml
+  4. Checks latest GitHub release using gh
+  5. Builds the wheel with python -m build .
+  6. Creates release with gh and uploads the original wheel filename
 "@
     exit 0
 }
 
-# Get current directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Push-Location $scriptDir
+$repo = "ddt3/prismasyncjmfjdf"
 
+Push-Location $scriptDir
 try {
-    # Check git status and upstream
-    Write-Host "Checking git status..." -ForegroundColor Cyan
-    
-    # Check for uncommitted changes
-    $gitStatus = git status --porcelain 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "⚠️ Not in a git repository or git command failed" -ForegroundColor Yellow
-    } elseif ($gitStatus) {
-        Write-Host "❌ You have uncommitted changes:" -ForegroundColor Red
-        Write-Host $gitStatus
-        Write-Host ""
-        Write-Host "Please commit or stash your changes before releasing:" -ForegroundColor Yellow
-        Write-Host "  git add ."
-        Write-Host "  git commit -m 'message'"
-        exit 1
-    } else {
-        Write-Host "✓ Working directory is clean" -ForegroundColor Green
-    }
-    
-    # Fetch latest from remote
-    git fetch 2>$null
-    
-    # Get current branch
-    $currentBranch = git rev-parse --abbrev-ref HEAD 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        # Check if branch is up to date with remote
-        $localCommit = git rev-parse HEAD 2>$null
-        $remoteCommit = git rev-parse "origin/$currentBranch" 2>$null
-        
-        if ($remoteCommit -and $localCommit -ne $remoteCommit) {
-            Write-Host "❌ Local branch is not up to date with remote" -ForegroundColor Red
-            Write-Host "Please push your changes to GitHub:"
-            Write-Host "  git push origin $currentBranch"
-            exit 1
-        } elseif ($remoteCommit) {
-            Write-Host "✓ Local branch is up to date with remote" -ForegroundColor Green
-        }
-    }
-    
-    Write-Host ""
-    
-    # Activate virtual environment
-    $venvPath = Join-Path $scriptDir ".venv"
-    $activateScript = Join-Path $venvPath "Scripts\Activate.ps1"
-    
-    if (Test-Path $activateScript) {
-        Write-Host "Activating virtual environment..." -ForegroundColor Cyan
-        & $activateScript
-    } else {
-        Write-Host "⚠️ Virtual environment not found at $venvPath" -ForegroundColor Yellow
-        Write-Host "Install dependencies with: python -m pip install build requests" -ForegroundColor Yellow
-    }
-    
-    # Set up GitHub token
+    Write-Host "============================================================" -ForegroundColor DarkCyan
+    Write-Host "PRISMAsync Python Module Release Script" -ForegroundColor DarkCyan
+    Write-Host "============================================================" -ForegroundColor DarkCyan
+
     if ($GitHubToken) {
         $env:GITHUB_TOKEN = $GitHubToken
     }
-    
-    if (-not $env:GITHUB_TOKEN) {
-        Write-Host "❌ GITHUB_TOKEN not set" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "Set your GitHub token first:"
-        Write-Host ""
-        Write-Host "  `$env:GITHUB_TOKEN = 'your_token_here'"
-        Write-Host "  .\release.ps1"
-        Write-Host ""
-        Write-Host "Or run: .\release.ps1 -Help" -ForegroundColor Cyan
-        exit 1
+
+    Write-Step "Step 0: Checking required tools..."
+    foreach ($tool in @("git", "python", "gh")) {
+        $null = Get-Command $tool -ErrorAction SilentlyContinue
+        if (-not $?) {
+            Fail "Required tool '$tool' is not available on PATH"
+        }
     }
-    
-    # Run the Python release script
-    Write-Host "Starting release process..." -ForegroundColor Cyan
-    Write-Host ""
-    
-    $pythonArgs = @("release_version.py")
-    if ($DryRun) {
-        $pythonArgs += "--dry-run"
-        Write-Host "🔄 DRY RUN MODE - No release will be created" -ForegroundColor Yellow
-        Write-Host ""
+
+    gh auth status | Out-Null
+    $ghAuthed = ($LASTEXITCODE -eq 0)
+    if (-not $ghAuthed -and -not $env:GITHUB_TOKEN) {
+        Fail "Neither gh authentication nor GITHUB_TOKEN is available. Run 'gh auth login' or set GITHUB_TOKEN."
     }
-    
-    python @pythonArgs
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host ""
-        Write-Host "✅ Release completed successfully!" -ForegroundColor Green
+
+    Write-Step "Step 1: Checking git status..."
+    $gitStatus = git status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Not in a git repository or git status failed"
+    }
+    if ($gitStatus) {
+        Write-Host $gitStatus
+        Fail "You have uncommitted changes. Commit or stash before releasing."
+    }
+    Write-Host "[OK] Working directory is clean" -ForegroundColor Green
+
+    git fetch origin
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Failed to fetch from origin"
+    }
+
+    $currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
+    if (-not $currentBranch) {
+        Fail "Could not determine current branch"
+    }
+
+    $localCommit = (git rev-parse HEAD).Trim()
+    $remoteCommit = (git rev-parse "origin/$currentBranch" 2>$null).Trim()
+    if (-not $remoteCommit) {
+        Fail "Could not resolve origin/$currentBranch"
+    }
+
+    if ($localCommit -ne $remoteCommit) {
+        Fail "Local branch '$currentBranch' is not up to date with origin/$currentBranch"
+    }
+    Write-Host "[OK] Branch '$currentBranch' is up to date with origin" -ForegroundColor Green
+
+    Write-Step "Step 2: Reading project version..."
+    $pyprojectPath = Join-Path $scriptDir "pyproject.toml"
+    $currentVersion = Get-PyProjectVersion -PyProjectPath $pyprojectPath
+    Write-Host "Current version in pyproject.toml: $currentVersion"
+
+    Write-Step "Step 3: Checking latest release on GitHub..."
+    $latestVersion = Get-LatestReleaseVersion -Repository $repo
+    if ($latestVersion) {
+        Write-Host "Latest release on GitHub: $latestVersion"
+        [version]$curr = $currentVersion
+        [version]$latest = $latestVersion
+        if ($curr -le $latest) {
+            Fail "Version must be greater than latest release ($latestVersion)."
+        }
+        Write-Host "[OK] Version changed: $latestVersion -> $currentVersion" -ForegroundColor Green
     } else {
-        Write-Host ""
-        Write-Host "❌ Release failed with exit code $LASTEXITCODE" -ForegroundColor Red
-        exit 1
+        Write-Host "No existing releases found on GitHub"
     }
+
+    Write-Step "Step 4: Building wheel..."
+    python -m build .
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Build failed"
+    }
+
+    $distDir = Join-Path $scriptDir "dist"
+    $wheels = Get-ChildItem -Path $distDir -Filter "*.whl" | Sort-Object LastWriteTime -Descending
+    if (-not $wheels -or $wheels.Count -eq 0) {
+        Fail "No wheel file found in dist/"
+    }
+    $wheelPath = $wheels[0].FullName
+    $wheelName = $wheels[0].Name
+    Write-Host "[OK] Built wheel: $wheelName" -ForegroundColor Green
+
+    $tag = "v$currentVersion"
+
+    if ($DryRun) {
+        Write-Step "Step 5: Dry run summary"
+        Write-Host "[DRY-RUN] Would create release: $tag" -ForegroundColor Yellow
+        Write-Host "[DRY-RUN] Would upload asset: $wheelName" -ForegroundColor Yellow
+        Write-Host "`nRelease checks and build completed successfully." -ForegroundColor Green
+        exit 0
+    }
+
+    Write-Step "Step 5: Creating GitHub release with gh..."
+    gh release create $tag $wheelPath --repo $repo --title "Release $tag" --notes "Release $tag of prismasyncjmfjdf"
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Failed to create GitHub release"
+    }
+
+    Write-Host "`n[SUCCESS] Release completed successfully!" -ForegroundColor Green
+    Write-Host "Release URL: https://github.com/$repo/releases/tag/$tag"
 }
 finally {
     Pop-Location
