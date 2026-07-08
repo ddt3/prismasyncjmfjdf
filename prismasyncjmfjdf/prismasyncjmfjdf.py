@@ -368,7 +368,7 @@ def SendMime(url,mime_file):
     headers={'Content-Type': 'multipart/related'}
     try:
       # Read and submit as raw bytes to support binary MIME parts (e.g. ODF).
-      response=requests.post(url=url, data=datafile.read(), headers=headers, timeout=30, verify=True)
+      response=requests.post(url=url, data=datafile.read(), headers=headers, timeout=(3.05, 120), verify=True)
       root = xml.dom.minidom.parseString(response.content)
     except requests.exceptions.RequestException as e:
       print(f"Unexpected reply {e} from {url}")
