@@ -17,6 +17,25 @@ In the folder where ``pyproject.toml`` can be found, start build:
 
     python -m build .
 
+# Automated release and package index
+This repository contains a GitHub Actions workflow at [`.github/workflows/release-and-pages.yml`](.github/workflows/release-and-pages.yml) that automates:
+
+1. Building wheel and sdist when a tag `v*` is pushed.
+2. Creating/updating a GitHub release and uploading build artifacts.
+3. Generating a static PEP 503-style package index page.
+4. Publishing that index on GitHub Pages.
+
+Expected package index URL after enabling GitHub Pages:
+
+    https://ddt3.github.io/prismasyncjmfjdf/simple/prismasyncjmfjdf/
+
+Use this URL in downstream requirements files with:
+
+    -f https://ddt3.github.io/prismasyncjmfjdf/simple/prismasyncjmfjdf/
+    prismasyncjmfjdf
+
+This lets pip discover all released wheel versions and pick the latest compatible one without editing requirements for each release.
+
 # Chunked MIME upload options (Phase 1)
 For large MIME packages, upload can be streamed using HTTP chunked transfer encoding.
 
