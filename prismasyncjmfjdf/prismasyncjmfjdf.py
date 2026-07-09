@@ -327,13 +327,15 @@ def CreateMimePackage (jmf_file, jdf_file,pdf_url, pdf_coding="binary"):
   #outfile closed, return mime file name
   return unique_filename
 
-def SendJob(url,pdfurl, *jdf_file_param):
+def SendJob(url,pdfurl, *jdf_file_param, chunked_upload=False, chunk_size=65536):
   """Sends a job to the given url
 
     Parameters:
     url: full link to printer jmf interface e.g. http://prismasync.lan:8010
     pdf: URL for PDF file to be send (either file: or http: URL )
     optional: path to JDF file, if this parameter is not provided , Template.jdf is used.
+    chunked_upload: If True, submit MIME using HTTP Transfer-Encoding: chunked.
+    chunk_size: Size in bytes of each upload chunk when chunked_upload is True.
 
     Returns:
     id:QueueEntryID of submitted job
@@ -346,41 +348,72 @@ def SendJob(url,pdfurl, *jdf_file_param):
     jdf_file=jdf_template
 
   mime_file=CreateMimePackage(jmf_SubmitQueueEntry_msg,jdf_file,pdfurl)
-  id_array=SendMime(url,mime_file)
+  id_array=SendMime(url,mime_file, chunked_upload=chunked_upload, chunk_size=chunk_size)
   if id_array :
     Path(mime_file).unlink()
     return id_array
   else:
     return 0
 
-def SendMime(url,mime_file):
+def _iter_file_chunks(file_obj, chunk_size):
+  """Yield file content in fixed-size chunks for streaming uploads."""
+  while True:
+    chunk = file_obj.read(chunk_size)
+    if not chunk:
+      break
+    yield chunk
+
+def SendMime(url,mime_file, chunked_upload=False, chunk_size=65536):
   """Sends a mime file to the given url
 
     Parameters:
     url: Full link to printer jmf interface e.g. http://prismasync.lan:8010
     mime_file: Path to mime file mime (containing JMF,JDF and optionally a PDF).
+    chunked_upload: If True, use HTTP Transfer-Encoding: chunked.
+    chunk_size: Size in bytes of each streamed chunk when chunked_upload is True.
 
     Returns:
     id:QueueEntryID of submitted job
 
   """
+  if chunk_size <= 0 and chunked_upload:
+    print("Invalid chunk_size:", chunk_size)
+    return 0
+
   with open(mime_file, 'rb') as datafile:
     headers={'Content-Type': 'multipart/related'}
+
+    if chunked_upload:
+      headers['Transfer-Encoding'] = 'chunked'
+      request_data = _iter_file_chunks(datafile, chunk_size)
+    else:
+      request_data = datafile
+
     try:
-      # Read and submit as raw bytes to support binary MIME parts (e.g. ODF).
-      response=requests.post(url=url, data=datafile.read(), headers=headers, timeout=(3.05, 120), verify=True)
-      root = xml.dom.minidom.parseString(response.content)
+      response=requests.post(url=url, data=request_data, headers=headers, timeout=(3.05, 120), verify=True)
     except requests.exceptions.RequestException as e:
       print(f"Unexpected reply {e} from {url}")
       print(sys.exc_info()[0], "occurred.")
       return 0
+
+    try:
+      root = xml.dom.minidom.parseString(response.content)
+    except Exception as e:
+      print(f"Unexpected non-XML reply {e} from {url}")
+      print("Reply body:", response.content[:500])
+      return 0
+
     # When submission is successfull reply JMF will contain submitted queueentries, the latest QueueEntryID is the one just submitted, return this id.
     try:
       Entries=root.getElementsByTagName("QueueEntry")
       return_id_array=Entries[0].getAttribute("QueueEntryID")
     except:
       print ("Job could not be submitted keeping mime package:",mime_file )
-      print ("PRISMAsync returned: \"", root.getElementsByTagName("Comment")[0].firstChild.nodeValue, "\"")
+      comments = root.getElementsByTagName("Comment")
+      if comments and comments[0].firstChild:
+        print ("PRISMAsync returned: \"", comments[0].firstChild.nodeValue, "\"")
+      else:
+        print("PRISMAsync returned no QueueEntry and no Comment element")
 
       return 0
     return return_id_array

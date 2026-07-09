@@ -17,3 +17,39 @@ In the folder where ``pyproject.toml`` can be found, start build:
 
     python -m build .
 
+# Chunked MIME upload options (Phase 1)
+For large MIME packages, upload can be streamed using HTTP chunked transfer encoding.
+
+`SendMime` options:
+- `chunked_upload` (default `False`): when `True`, uses `Transfer-Encoding: chunked`.
+- `chunk_size` (default `65536`): bytes per uploaded chunk.
+
+`SendJob` exposes the same options and passes them through to `SendMime`.
+
+Example using `SendJob`:
+
+    import prismasyncjmfjdf
+    queue_id = prismasyncjmfjdf.SendJob(
+        "https://printer.local:8010",
+        "file://C:/jobs/myjob.pdf",
+        chunked_upload=True,
+        chunk_size=65536,
+    )
+
+Example using `SendMime`:
+
+    import prismasyncjmfjdf
+    queue_id = prismasyncjmfjdf.SendMime(
+        "https://printer.local:8010",
+        "myjob.mjm",
+        chunked_upload=True,
+        chunk_size=65536,
+    )
+
+Backward compatibility:
+- Existing calls continue to work without changes because defaults remain unchanged.
+
+Compatibility caveat:
+- Some proxies/endpoints may not accept `Transfer-Encoding: chunked`.
+  If upload fails in such environments, set `chunked_upload=False`.
+

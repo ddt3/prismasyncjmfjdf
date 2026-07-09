@@ -1,6 +1,13 @@
 {
     "linter.enabled": true,
     "terminal.integrated.defaultProfile.windows": "PowerShell",
-    "pylint.args" : ["--rcfile=${workspaceFolder}/.vscode/pylintrc"],
+    "pylint.args": [
+        "--rcfile=${workspaceFolder}/.vscode/pylintrc"
+    ],
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
 
 }
