@@ -36,7 +36,7 @@ Use this URL in downstream requirements files with:
 
 This lets pip discover all released wheel versions and pick the latest compatible one without editing requirements for each release.
 
-# Chunked MIME upload options (Phase 1)
+# Chunked MIME upload options
 For large MIME packages, upload can be streamed using HTTP chunked transfer encoding.
 
 `SendMime` options:
@@ -71,4 +71,15 @@ Backward compatibility:
 Compatibility caveat:
 - Some proxies/endpoints may not accept `Transfer-Encoding: chunked`.
   If upload fails in such environments, set `chunked_upload=False`.
+
+# Streaming MIME build
+`CreateMimePackage` now copies the PDF payload in streaming chunks during MIME
+assembly, so it no longer loads the full PDF payload into memory in one `read()`
+operation. This improves memory behavior for large jobs while keeping output
+format and function signatures unchanged.
+
+Behavior notes:
+- MIME part ordering remains: JMF, JDF, optional PDF, footer.
+- Existing temporary-file behavior is unchanged for base64-encoded payload mode.
+- `SendJob` and `SendMime` usage remains unchanged.
 

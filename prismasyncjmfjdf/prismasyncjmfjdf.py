@@ -61,7 +61,7 @@ Content-Type: multipart/related; boundary="I_Love_PRISMAsync"
 --I_Love_PRISMAsync
 Content-ID: part1@PRISMAsync.printer
 Content-Type: application/vnd.cip4-jmf+xml
-content-transfer-encoding:7bit
+content-transfer-encoding:8bit
 Content-Disposition: attachment
 
 """
@@ -70,7 +70,7 @@ Content-Disposition: attachment
 mimeheader_jdf = """
 --I_Love_PRISMAsync
 Content-ID: part2@PRISMAsync.printer
-content-transfer-encoding:7bit
+content-transfer-encoding:8bit
 content-type: application/vnd.cip4-jdf+xml; charset="us-ascii"
 content-disposition: attachment; filename="Ticket.jdf"
 
@@ -97,6 +97,17 @@ Content-Disposition: attachment; filename=Job1.pdf
 mimefooter = """
 
 --I_Love_PRISMAsync--"""
+
+STREAM_CHUNK_SIZE = 65536
+
+
+def _copy_stream(source, target, chunk_size=STREAM_CHUNK_SIZE):
+  """Copy bytes from source to target in fixed-size chunks."""
+  while True:
+    chunk = source.read(chunk_size)
+    if not chunk:
+      break
+    target.write(chunk)
 
 
 def read_jmfjdf (message_file):
@@ -262,8 +273,7 @@ def CreateMimePackage (jmf_file, jdf_file,pdf_url, pdf_coding="binary"):
         with open(pdf_file, "rb") as source, open(encoded_filename, "wb") as target:
             # Create base64 encoded file from PDF
             with Base64IO(target) as encoded_target:
-                for line in source:
-                    encoded_target.write(line)
+                _copy_stream(source, encoded_target)
     except:
       print("File", encoded_filename, "could not be opened")
       return ""
@@ -318,9 +328,8 @@ def CreateMimePackage (jmf_file, jdf_file,pdf_url, pdf_coding="binary"):
         else:
           outfile.write(mimeheader_pdf.encode("utf-8"))
       # Add pdf file
-      # If the file is binary reading it line by line cannot be done (binary files don't contain lines)
         with open(encoded_filename,'rb') as tempfile:
-          outfile.write(tempfile.read())
+          _copy_stream(tempfile, outfile)
       # Path(encoded_filename).unlink()
     outfile.write(mimefooter.encode("utf-8"))
 
